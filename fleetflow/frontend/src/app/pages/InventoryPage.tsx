@@ -3,32 +3,37 @@ import { useNavigate } from "react-router";
 import { Truck, Plus, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { AddVehicleModal } from "../components/AddVehicleModal";
+import { vehicleService, Vehicle } from "../../services/vehicleService";
 
 export function InventoryPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [vehicles, setVehicles] = useState(() => {
-    const saved = localStorage.getItem("transcope_vehicles");
-    return saved ? JSON.parse(saved) : [
-      { id: "VEH-001", plate: "BIKE-1122", type: "Motorcycle", status: "Available", capacity: 50, year: 2023, make: "Honda", model: "CBR" },
-      { id: "VEH-002", plate: "VAN-2891", type: "Van", status: "On Trip", capacity: 1500, year: 2022, make: "Ford", model: "Transit" },
-      { id: "VEH-003", plate: "TRK-1456", type: "Truck", status: "Available", capacity: 5000, year: 2021, make: "Volvo", model: "FH16" },
-      { id: "VEH-004", plate: "VAN-3421", type: "Van", status: "Maintenance", capacity: 1500, year: 2020, make: "Mercedes", model: "Sprinter" },
-      { id: "VEH-005", plate: "TRK-9988", type: "Truck", status: "Available", capacity: 5000, year: 2019, make: "Scania", model: "R450" },
-    ];
-  });
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem("transcope_vehicles", JSON.stringify(vehicles));
-  }, [vehicles]);
+    fetchVehicles();
+  }, []);
+
+  const fetchVehicles = async () => {
+    try {
+      setIsLoading(true);
+      const data = await vehicleService.getAllVehicles();
+      setVehicles(data);
+    } catch (error: any) {
+      console.error('Fetch vehicles error:', error);
+      toast.error(error.response?.data?.message || 'Failed to load vehicles');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredVehicles = vehicles.filter(
     (v) =>
-      v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.make.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.model.toLowerCase().includes(searchQuery.toLowerCase())
+      v.licensePlate.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.type.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleAssignToTrip = (vehicleId: string, plate: string) => {
@@ -36,9 +41,26 @@ export function InventoryPage() {
     navigate("/trips", { state: { selectedVehicle: vehicleId } });
   };
 
-  const handleAddVehicle = (newVehicle: any) => {
-    setVehicles((prev) => [...prev, newVehicle]);
+  const handleAddVehicle = async (newVehicle: any) => {
+    try {
+      await vehicleService.createVehicle(newVehicle);
+      toast.success('Vehicle added successfully!');
+      fetchVehicles(); // Refresh the list
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to add vehicle');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-[#3B82F6] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Loading vehicles...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -100,12 +122,12 @@ export function InventoryPage() {
               </thead>
               <tbody>
                 {filteredVehicles.map((vehicle) => (
-                  <tr key={vehicle.id} className="border-b border-white/5 hover:bg-white/5 transition-all">
-                    <td className="p-4 text-white font-mono">{vehicle.id}</td>
-                    <td className="p-4 text-white font-semibold">{vehicle.plate}</td>
+                  <tr key={vehicle._id} className="border-b border-white/5 hover:bg-white/5 transition-all">
+                    <td className="p-4 text-white font-mono">{vehicle.name}</td>
+                    <td className="p-4 text-white font-semibold">{vehicle.licensePlate}</td>
                     <td className="p-4 text-gray-400">{vehicle.type}</td>
-                    <td className="p-4 text-gray-400">{vehicle.make} {vehicle.model}</td>
-                    <td className="p-4 text-gray-400">{vehicle.capacity}</td>
+                    <td className="p-4 text-gray-400">{vehicle.type}</td>
+                    <td className="p-4 text-gray-400">{vehicle.maxCapacity}</td>
                     <td className="p-4">
                       <span
                         className={`px-3 py-1 rounded-lg text-xs font-semibold ${
@@ -113,7 +135,9 @@ export function InventoryPage() {
                             ? "bg-[#10B981]/20 text-[#10B981]"
                             : vehicle.status === "On Trip"
                             ? "bg-[#3B82F6]/20 text-[#3B82F6]"
-                            : "bg-[#F59E0B]/20 text-[#F59E0B]"
+                            : vehicle.status === "In Shop"
+                            ? "bg-[#F59E0B]/20 text-[#F59E0B]"
+                            : "bg-[#EF4444]/20 text-[#EF4444]"
                         }`}
                       >
                         {vehicle.status}
@@ -121,7 +145,7 @@ export function InventoryPage() {
                     </td>
                     <td className="p-4">
                       <button
-                        onClick={() => handleAssignToTrip(vehicle.id, vehicle.plate)}
+                        onClick={() => handleAssignToTrip(vehicle._id, vehicle.licensePlate)}
                         disabled={vehicle.status !== "Available"}
                         className="text-[#3B82F6] hover:underline disabled:text-gray-600 disabled:cursor-not-allowed"
                       >

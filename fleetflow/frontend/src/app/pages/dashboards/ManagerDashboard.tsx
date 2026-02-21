@@ -1,38 +1,54 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Wrench, Gauge, TrendingUp, AlertTriangle } from "lucide-react";
 import { motion } from "motion/react";
+import { dashboardService, DashboardData } from "../../../services/dashboardService";
+import { toast } from "sonner";
 
 export function ManagerDashboard() {
   const navigate = useNavigate();
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Asset Utilization Data (Pie/Gauge Chart)
-  const utilizationData = [
-    { name: "Active", value: 42, color: "#10B981" },
-    { name: "Idle", value: 15, color: "#F59E0B" },
-    { name: "Maintenance", value: 8, color: "#EF4444" },
-  ];
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const data = await dashboardService.getManagerDashboard();
+        setDashboardData(data);
+      } catch (error: any) {
+        console.error('Dashboard error:', error);
+        toast.error(error.response?.data?.message || 'Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  // Maintenance Heatmap Data (by vehicle type)
-  const maintenanceHeatmap = [
-    { type: "Motorcycles", scheduled: 2, urgent: 0, completed: 15, health: 95 },
-    { type: "Vans", scheduled: 5, urgent: 1, completed: 42, health: 87 },
-    { type: "Trucks", scheduled: 3, urgent: 2, completed: 28, health: 78 },
-    { type: "Trailers", scheduled: 1, urgent: 0, completed: 12, health: 92 },
-  ];
+    fetchDashboardData();
+  }, []);
 
-  // Fleet Health Trend
-  const healthTrendData = [
-    { month: "Sep", health: 82 },
-    { month: "Oct", health: 85 },
-    { month: "Nov", health: 83 },
-    { month: "Dec", health: 87 },
-    { month: "Jan", health: 86 },
-    { month: "Feb", health: 89 },
-  ];
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-[#3B82F6] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const totalVehicles = utilizationData.reduce((sum, item) => sum + item.value, 0);
-  const utilizationRate = ((utilizationData[0].value / totalVehicles) * 100).toFixed(1);
+  if (!dashboardData) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-gray-400">No data available</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { kpis, utilizationData, healthTrendData, maintenanceHeatmap } = dashboardData;
 
   return (
     <div className="p-6">
@@ -53,7 +69,7 @@ export function ManagerDashboard() {
             <span className="text-[#10B981] text-sm font-semibold">+12%</span>
           </div>
           <h3 className="text-gray-400 text-sm mb-1">Utilization Rate</h3>
-          <p className="text-3xl font-bold text-white">{utilizationRate}%</p>
+          <p className="text-3xl font-bold text-white">{kpis.utilizationRate}%</p>
         </motion.div>
 
         <motion.div
@@ -64,10 +80,10 @@ export function ManagerDashboard() {
         >
           <div className="flex items-center justify-between mb-2">
             <Wrench className="text-[#F59E0B]" size={24} />
-            <span className="text-[#EF4444] text-sm font-semibold">3 Urgent</span>
+            <span className="text-[#EF4444] text-sm font-semibold">{kpis.urgentMaintenance} Urgent</span>
           </div>
           <h3 className="text-gray-400 text-sm mb-1">Maintenance Queue</h3>
-          <p className="text-3xl font-bold text-white">11</p>
+          <p className="text-3xl font-bold text-white">{kpis.maintenanceQueue}</p>
         </motion.div>
 
         <motion.div
@@ -81,7 +97,7 @@ export function ManagerDashboard() {
             <span className="text-[#10B981] text-sm font-semibold">+3%</span>
           </div>
           <h3 className="text-gray-400 text-sm mb-1">Avg Fleet Health</h3>
-          <p className="text-3xl font-bold text-white">89%</p>
+          <p className="text-3xl font-bold text-white">{kpis.avgFleetHealth}%</p>
         </motion.div>
 
         <motion.div
@@ -95,7 +111,7 @@ export function ManagerDashboard() {
             <span className="text-gray-400 text-sm font-semibold">Last 30d</span>
           </div>
           <h3 className="text-gray-400 text-sm mb-1">Critical Alerts</h3>
-          <p className="text-3xl font-bold text-white">3</p>
+          <p className="text-3xl font-bold text-white">{kpis.criticalAlerts}</p>
         </motion.div>
       </div>
 

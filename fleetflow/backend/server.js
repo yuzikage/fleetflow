@@ -3,7 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
-
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const vehicleRoutes = require('./routes/vehicleRoutes');
+const tripRoutes = require('./routes/tripRoutes');
+const driverRoutes = require('./routes/driverRoutes');
 
 const app = express();
 
@@ -17,6 +20,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/trips', tripRoutes);
+app.use('/api/drivers', driverRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

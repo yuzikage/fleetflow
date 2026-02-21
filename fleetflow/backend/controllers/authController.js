@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
-const db = require('../config/inMemoryDb');
+const User = require('../models/User');
 const { sendTokenResponse } = require('../utils/tokenUtils');
 
 // @desc    Register user
@@ -16,7 +16,7 @@ exports.signup = async (req, res) => {
 
   try {
     // Check if user exists
-    const existingUser = db.users.findByEmail(email);
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'User already exists with this email' });
     }
@@ -32,7 +32,7 @@ exports.signup = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user
-    const user = db.users.create({
+    const user = await User.create({
       name,
       email,
       password: hashedPassword,
@@ -59,7 +59,7 @@ exports.login = async (req, res) => {
 
   try {
     // Check if user exists
-    const user = db.users.findByEmail(email);
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
@@ -98,7 +98,7 @@ exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
 
   try {
-    const user = db.users.findByEmail(email);
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }

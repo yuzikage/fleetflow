@@ -1,42 +1,80 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useFleetData } from "../../context/FleetDataContext";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { MapPin, Clock, Package, TrendingUp, Plus } from "lucide-react";
+import { MapPin, Clock, Package, TrendingUp, Plus, AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
+import { dashboardService } from "../../../services/dashboardService";
+import { toast } from "sonner";
 
 export function DispatcherDashboard() {
   const navigate = useNavigate();
   const { recentTripUpdates } = useFleetData();
+  
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Pending Cargo Queue
-  const cargoQueue = [
-    { id: "CRG-001", origin: "Warehouse A", destination: "Client Site 1", weight: 1500, priority: "high", eta: "2 hours" },
-    { id: "CRG-002", origin: "Warehouse B", destination: "Client Site 2", weight: 800, priority: "medium", eta: "4 hours" },
-    { id: "CRG-003", origin: "Warehouse A", destination: "Client Site 3", weight: 2200, priority: "high", eta: "1 hour" },
-    { id: "CRG-004", origin: "Warehouse C", destination: "Client Site 4", weight: 1200, priority: "low", eta: "6 hours" },
-    { id: "CRG-005", origin: "Warehouse B", destination: "Client Site 5", weight: 950, priority: "medium", eta: "3 hours" },
-  ];
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
-  // Active Trip Progress Data
-  const activeTrips = [
-    { id: "TRP-001", vehicle: "VAN-2891", driver: "John Doe", progress: 75, eta: "45 min" },
-    { id: "TRP-002", vehicle: "TRK-1456", driver: "Jane Smith", progress: 20, eta: "3 hrs" },
-    { id: "TRP-003", vehicle: "VAN-3421", driver: "Bob Wilson", progress: 90, eta: "15 min" },
-    { id: "TRP-004", vehicle: "BIKE-1122", driver: "Alice Chen", progress: 50, eta: "1.5 hrs" },
-    { id: "TRP-005", vehicle: "TRK-9988", driver: "Mike Jones", progress: 35, eta: "2 hrs" },
-  ];
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await dashboardService.getDispatcherDashboard();
+      
+      if (response.success) {
+        setDashboardData(response.data);
+      } else {
+        setError('Failed to load dashboard data');
+        toast.error('Failed to load dashboard data');
+      }
+    } catch (err: any) {
+      console.error('Dashboard error:', err);
+      setError(err.response?.data?.message || 'Failed to load dashboard data');
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Trip completion stats for chart
-  const tripStats = [
-    { day: "Mon", completed: 12, pending: 8 },
-    { day: "Tue", completed: 15, pending: 6 },
-    { day: "Wed", completed: 18, pending: 4 },
-    { day: "Thu", completed: 14, pending: 7 },
-    { day: "Fri", completed: 20, pending: 5 },
-    { day: "Sat", completed: 10, pending: 3 },
-    { day: "Sun", completed: 8, pending: 2 },
-  ];
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B82F6] mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="text-[#EF4444] mx-auto mb-4" size={48} />
+          <p className="text-white text-xl mb-2">Failed to Load Dashboard</p>
+          <p className="text-gray-400 mb-4">{error}</p>
+          <button
+            onClick={fetchDashboardData}
+            className="bg-[#3B82F6] text-white px-6 py-2 rounded-lg hover:bg-[#2563EB] transition-all"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { kpis, cargoQueue, activeTrips, tripStats } = dashboardData || {
+    kpis: { activeTrips: 0, pendingCargo: 0, availableVehicles: 0, availableDrivers: 0 },
+    cargoQueue: [],
+    activeTrips: [],
+    tripStats: []
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -76,10 +114,12 @@ export function DispatcherDashboard() {
         >
           <div className="flex items-center justify-between mb-2">
             <Package className="text-[#3B82F6]" size={24} />
-            <span className="text-[#EF4444] text-sm font-semibold">2 Urgent</span>
+            <span className="text-[#EF4444] text-sm font-semibold">
+              {cargoQueue.filter((c: any) => c.priority === 'high').length} Urgent
+            </span>
           </div>
           <h3 className="text-gray-400 text-sm mb-1">Pending Cargo</h3>
-          <p className="text-3xl font-bold text-white">{cargoQueue.length}</p>
+          <p className="text-3xl font-bold text-white">{kpis.pendingCargo}</p>
         </motion.div>
 
         <motion.div
@@ -93,7 +133,7 @@ export function DispatcherDashboard() {
             <span className="text-[#10B981] text-sm font-semibold">Live</span>
           </div>
           <h3 className="text-gray-400 text-sm mb-1">Active Trips</h3>
-          <p className="text-3xl font-bold text-white">{activeTrips.length}</p>
+          <p className="text-3xl font-bold text-white">{kpis.activeTrips}</p>
         </motion.div>
 
         <motion.div
@@ -104,10 +144,10 @@ export function DispatcherDashboard() {
         >
           <div className="flex items-center justify-between mb-2">
             <TrendingUp className="text-[#F59E0B]" size={24} />
-            <span className="text-[#10B981] text-sm font-semibold">+15%</span>
+            <span className="text-gray-400 text-sm font-semibold">Available</span>
           </div>
-          <h3 className="text-gray-400 text-sm mb-1">Today's Deliveries</h3>
-          <p className="text-3xl font-bold text-white">47</p>
+          <h3 className="text-gray-400 text-sm mb-1">Available Vehicles</h3>
+          <p className="text-3xl font-bold text-white">{kpis.availableVehicles}</p>
         </motion.div>
 
         <motion.div
@@ -118,10 +158,10 @@ export function DispatcherDashboard() {
         >
           <div className="flex items-center justify-between mb-2">
             <Clock className="text-[#06B6D4]" size={24} />
-            <span className="text-gray-400 text-sm font-semibold">Avg</span>
+            <span className="text-gray-400 text-sm font-semibold">Ready</span>
           </div>
-          <h3 className="text-gray-400 text-sm mb-1">On-Time Rate</h3>
-          <p className="text-3xl font-bold text-white">94%</p>
+          <h3 className="text-gray-400 text-sm mb-1">Available Drivers</h3>
+          <p className="text-3xl font-bold text-white">{kpis.availableDrivers}</p>
         </motion.div>
       </div>
 
@@ -134,7 +174,13 @@ export function DispatcherDashboard() {
           </div>
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {cargoQueue.map((cargo, index) => (
+            {cargoQueue.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <Package size={48} className="mx-auto mb-2 opacity-50" />
+                <p>No pending cargo</p>
+              </div>
+            ) : (
+              cargoQueue.map((cargo: any, index: number) => (
               <motion.div
                 key={cargo.id}
                 initial={{ opacity: 0, x: -20 }}
@@ -165,7 +211,8 @@ export function DispatcherDashboard() {
                   <span>ETA: {cargo.eta}</span>
                 </div>
               </motion.div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -217,7 +264,13 @@ export function DispatcherDashboard() {
         </div>
 
         <div className="space-y-4">
-          {activeTrips.map((trip, index) => (
+          {activeTrips.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <MapPin size={48} className="mx-auto mb-2 opacity-50" />
+              <p>No active trips</p>
+            </div>
+          ) : (
+            activeTrips.map((trip: any, index: number) => (
             <motion.div
               key={trip.id}
               initial={{ opacity: 0, y: 20 }}
@@ -250,7 +303,8 @@ export function DispatcherDashboard() {
                 />
               </div>
             </motion.div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

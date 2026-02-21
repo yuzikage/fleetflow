@@ -9,10 +9,10 @@ exports.generateToken = (userId) => {
 
 // Send token response
 exports.sendTokenResponse = (user, statusCode, res) => {
-  const token = this.generateToken(user.id);
+  const token = this.generateToken(user._id || user.id);
 
   const userResponse = {
-    id: user.id,
+    id: user._id || user.id,
     name: user.name,
     email: user.email,
     role: user.role

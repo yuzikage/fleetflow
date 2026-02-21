@@ -1,0 +1,32 @@
+# Documentation (optional - remove if you want to track these)
+INTEGRATION.md
+TESTING.md
+
+# Lock files
+pnpm-lock.yaml
+package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

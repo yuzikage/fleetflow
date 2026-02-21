@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useFleetData } from "../context/FleetDataContext";
-import { MapPin, Truck, User, Package, ArrowLeft, CheckCircle } from "lucide-react";
+import { MapPin, Truck, User, Package, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
+import { vehicleService } from "../../services/vehicleService";
+import { driverService } from "../../services/driverService";
+import { tripService } from "../../services/tripService";
 
 export function TripCreatePage() {
   const navigate = useNavigate();
@@ -25,22 +28,37 @@ export function TripCreatePage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [availableVehicles, setAvailableVehicles] = useState<any[]>([]);
+  const [availableDrivers, setAvailableDrivers] = useState<any[]>([]);
 
-  // Available vehicles (only Available status)
-  const availableVehicles = [
-    { id: "VEH-001", plate: "BIKE-1122", type: "Motorcycle", capacity: 50 },
-    { id: "VEH-003", plate: "TRK-1456", type: "Truck", capacity: 5000 },
-    { id: "VEH-005", plate: "TRK-9988", type: "Truck", capacity: 5000 },
-    { id: "VEH-007", plate: "VAN-5634", type: "Van", capacity: 1500 },
-  ];
+  useEffect(() => {
+    fetchAvailableResources();
+  }, []);
 
-  // Available drivers (only Active status)
-  const availableDrivers = [
-    { id: "DRV-001", name: "John Doe", rating: 4.8 },
-    { id: "DRV-002", name: "Jane Smith", rating: 4.9 },
-    { id: "DRV-003", name: "Bob Wilson", rating: 4.7 },
-    { id: "DRV-008", name: "Sarah Kim", rating: 4.6 },
-  ];
+  const fetchAvailableResources = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch available vehicles
+      const vehiclesResponse = await vehicleService.getAllVehicles({ status: 'Available' });
+      if (vehiclesResponse.success) {
+        setAvailableVehicles(vehiclesResponse.data);
+      }
+      
+      // Fetch available drivers
+      const driversResponse = await driverService.getAllDrivers({ status: 'On Duty' });
+      if (driversResponse.success) {
+        setAvailableDrivers(driversResponse.data);
+      }
+    } catch (error: any) {
+      console.error('Error fetching resources:', error);
+      toast.error('Failed to load available vehicles and drivers');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -54,9 +72,9 @@ export function TripCreatePage() {
 
     // Validate weight vs vehicle capacity
     if (formData.weight && formData.vehicleId) {
-      const selectedVehicle = availableVehicles.find((v) => v.id === formData.vehicleId);
-      if (selectedVehicle && parseFloat(formData.weight) > selectedVehicle.capacity) {
-        newErrors.weight = `Weight exceeds vehicle capacity (${selectedVehicle.capacity} kg)`;
+      const selectedVehicle = availableVehicles.find((v) => v._id === formData.vehicleId);
+      if (selectedVehicle && parseFloat(formData.weight) > selectedVehicle.maxCapacity) {
+        newErrors.weight = `Weight exceeds vehicle capacity (${selectedVehicle.maxCapacity} kg)`;
       }
     }
 
@@ -64,7 +82,7 @@ export function TripCreatePage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) {
@@ -72,36 +90,48 @@ export function TripCreatePage() {
       return;
     }
 
-    const selectedVehicle = availableVehicles.find((v) => v.id === formData.vehicleId);
-    const selectedDriver = availableDrivers.find((d) => d.id === formData.driverId);
+    try {
+      setSubmitting(true);
 
-    const tripId = `TRP-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+      const tripData = {
+        vehicle: formData.vehicleId,
+        driver: formData.driverId,
+        origin: formData.origin,
+        destination: formData.destination,
+        cargoWeight: parseFloat(formData.weight),
+        cargoDescription: formData.notes,
+        priority: formData.priority as 'low' | 'medium' | 'high',
+        scheduledDate: formData.scheduledDate,
+        estimatedDuration: 120 // Default 2 hours, can be calculated based on distance
+      };
 
-    // Add trip update to fleet data context
-    addTripUpdate({
-      id: tripId,
-      status: "Scheduled",
-    });
+      const response = await tripService.createTrip(tripData);
 
-    toast.success("Trip created successfully!", {
-      description: `${tripId} scheduled for ${formData.scheduledDate}`,
-    });
+      if (response.success) {
+        const trip = response.data;
+        
+        // Add trip update to fleet data context
+        addTripUpdate({
+          id: trip.tripId,
+          status: trip.status,
+        });
 
-    // Navigate back to trips page
-    setTimeout(() => {
-      navigate("/trips", {
-        state: {
-          newTrip: {
-            id: tripId,
-            vehicle: selectedVehicle?.plate,
-            driver: selectedDriver?.name,
-            origin: formData.origin,
-            destination: formData.destination,
-            status: "Scheduled",
-          },
-        },
-      });
-    }, 1000);
+        toast.success("Trip created successfully!", {
+          description: `${trip.tripId} scheduled for ${new Date(formData.scheduledDate).toLocaleString()}`,
+        });
+
+        // Navigate back to trips page
+        setTimeout(() => {
+          navigate("/trips");
+        }, 1000);
+      }
+    } catch (error: any) {
+      console.error('Create trip error:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to create trip';
+      toast.error(errorMessage);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (field: string, value: string) => {
@@ -113,7 +143,16 @@ export function TripCreatePage() {
 
   return (
     <div className="p-6">
-      {/* Header */}
+      {loading ? (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B82F6] mx-auto mb-4"></div>
+            <p className="text-gray-400">Loading resources...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Header */}
       <div className="mb-8">
         <button
           onClick={() => navigate("/trips")}
@@ -266,11 +305,15 @@ export function TripCreatePage() {
                     }`}
                   >
                     <option value="" className="bg-[#0F172A]">Choose a vehicle...</option>
-                    {availableVehicles.map((vehicle) => (
-                      <option key={vehicle.id} value={vehicle.id} className="bg-[#0F172A]">
-                        {vehicle.plate} - {vehicle.type} ({vehicle.capacity}kg)
-                      </option>
-                    ))}
+                    {availableVehicles.length === 0 ? (
+                      <option disabled className="bg-[#0F172A]">No available vehicles</option>
+                    ) : (
+                      availableVehicles.map((vehicle) => (
+                        <option key={vehicle._id} value={vehicle._id} className="bg-[#0F172A]">
+                          {vehicle.licensePlate} - {vehicle.type} ({vehicle.maxCapacity}kg)
+                        </option>
+                      ))
+                    )}
                   </select>
                   {errors.vehicleId && <p className="text-[#EF4444] text-xs mt-1">{errors.vehicleId}</p>}
                 </div>
@@ -290,11 +333,15 @@ export function TripCreatePage() {
                     }`}
                   >
                     <option value="" className="bg-[#0F172A]">Choose a driver...</option>
-                    {availableDrivers.map((driver) => (
-                      <option key={driver.id} value={driver.id} className="bg-[#0F172A]">
-                        {driver.name} (★ {driver.rating})
-                      </option>
-                    ))}
+                    {availableDrivers.length === 0 ? (
+                      <option disabled className="bg-[#0F172A]">No available drivers</option>
+                    ) : (
+                      availableDrivers.map((driver) => (
+                        <option key={driver._id} value={driver._id} className="bg-[#0F172A]">
+                          {driver.name} - {driver.licenseCategory}
+                        </option>
+                      ))
+                    )}
                   </select>
                   {errors.driverId && <p className="text-[#EF4444] text-xs mt-1">{errors.driverId}</p>}
                 </div>
@@ -336,15 +383,27 @@ export function TripCreatePage() {
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white py-3 rounded-xl font-semibold hover:shadow-[0_10px_40px_rgba(59,130,246,0.4)] transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                disabled={submitting}
+                className="w-full bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white py-3 rounded-xl font-semibold hover:shadow-[0_10px_40px_rgba(59,130,246,0.4)] transition-all hover:scale-[1.02] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <CheckCircle size={20} />
-                Create Trip
+                {submitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={20} />
+                    Create Trip
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       </form>
+        </>
+      )}
     </div>
   );
 }
